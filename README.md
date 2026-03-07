@@ -1,0 +1,2 @@
+# Thermodynamics-
+Zeta Minimizer Theorem
