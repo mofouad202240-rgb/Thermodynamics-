@@ -1,0 +1,107 @@
+Sub CalculateZetaPipeline_Simple()
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("Sheet1")   ' ? Change sheet name if needed
+    
+    ' ================== CHANGE PRIME HERE ==================
+    Const PrimePI As Double = 3              ' ??? CHANGE THIS VALUE (e.g. 2, 3, 5, 7, 11, 13, 17...)
+    ' ======================================================
+    
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "D").End(xlUp).Row
+    
+    ' === Set Headers ===
+    With ws
+        .Cells(1, 4).Value = "Z_mix"
+        .Cells(1, 5).Value = "Z(s)"
+        .Cells(1, 6).Value = "Residual"
+        .Cells(1, 7).Value = "x_i (mole fraction)"
+    End With
+    
+    Dim i As Long
+    For i = 2 To lastRow
+        Dim Zmix As Double
+        Zmix = ws.Cells(i, 4).Value
+        
+        If Zmix > 0 Then
+            Dim s As Double
+            s = SolveForS(Zmix, PrimePI)
+            
+            Dim Zcalc As Double
+            Zcalc = ZFunction(s, PrimePI)
+            
+            Dim x As Double
+            x = ComputeXi(s, PrimePI)
+            
+            ' === Write only the three columns you want ===
+            ws.Cells(i, 5).Value = Zcalc          ' E: Z(s)
+            ws.Cells(i, 6).Value = Zcalc - Zmix   ' F: Residual
+            ws.Cells(i, 7).Value = x              ' G: x_i
+        End If
+    Next i
+    
+    ' === Auto-format ===
+    ws.Columns("E").NumberFormat = "0.000000000"
+    ws.Columns("F").NumberFormat = "0.000000000E+00"
+    ws.Columns("G").NumberFormat = "0.000000"
+    
+    MsgBox "? Simple calculation complete!" & vbCrLf & _
+           "Prime used: " & PrimePI & vbCrLf & _
+           "Z(s), Residual, and x_i written in columns E–G.", vbInformation
+
+End Sub
+
+' ====================== SUPPORTING FUNCTIONS ======================
+
+Function ZFunction(s As Double, p As Double) As Double
+    On Error GoTo ErrHandler
+    ZFunction = 1 / (1 - p ^ (-s)) * 1 / (1 - 19 ^ (-s))
+    Exit Function
+ErrHandler:
+    ZFunction = IIf(s > 0, 1#, 0#)
+End Function
+
+Function SolveForS(Zmix As Double, p As Double) As Double
+    Dim tol As Double: tol = 0.0000000001
+    Dim maxIter As Integer: maxIter = 1000
+    Dim low As Double, high As Double, mid As Double
+    Dim isDecreasing As Boolean
+    
+    If Abs(Zmix - 1) < 0.000000001 Then
+        SolveForS = 10000
+        Exit Function
+    End If
+    
+    If Zmix > 1 Then
+        low = 0.000001
+        high = 100
+        While ZFunction(low, p) < Zmix: low = low / 2: Wend
+        While ZFunction(high, p) > Zmix: high = high * 2: Wend
+        isDecreasing = True
+    Else
+        low = -100
+        high = -0.000001
+        While ZFunction(low, p) > Zmix: low = low * 2: Wend
+        While ZFunction(high, p) < Zmix: high = high / 2: Wend
+        isDecreasing = False
+    End If
+    
+    Dim iter As Integer: iter = 0
+    Do While Abs(high - low) > tol And iter < maxIter
+        mid = (low + high) / 2
+        If isDecreasing Then
+            If ZFunction(mid, p) > Zmix Then low = mid Else high = mid
+        Else
+            If ZFunction(mid, p) < Zmix Then low = mid Else high = mid
+        End If
+        iter = iter + 1
+    Loop
+    SolveForS = mid
+End Function
+
+Function ComputeXi(s As Double, p As Double) As Double
+    Dim num As Double, den As Double
+    num = 19 ^ s - 1
+    den = p ^ s + 19 ^ s - 2
+    ComputeXi = IIf(Abs(den) < 0.000000000001, 0.5, num / den)
+End Function
